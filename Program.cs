@@ -159,14 +159,14 @@ namespace ConsoleApp1
             }
 
         }
-        //写入监控数据库
+        //写入监控数据库D:\IIS\PCStatusCollecter\updateRecords.asp
         public static string saveToServer(string str1, string str2, string str3, string str4, string str5, string str6)
         { 
             try
             {
                 String requestStr = "";
                 requestStr = str1 + "updateRecords.asp?recordTime=";
-                requestStr += str2+ "&spareTime=";
+                requestStr += str2+ "&operatedTime=";
                 requestStr += str3 + "&hostInfo=";
                 requestStr += str4 + "&hostName=";
                 requestStr += str5 + "&hostIP=";
@@ -179,6 +179,9 @@ namespace ConsoleApp1
             }
             catch (Exception ex)
             {
+                StreamWriter sw = File.AppendText("errorLog.txt");
+                sw.WriteLine(DateTime.Now.ToString("yyyyMMddHHmmss")+" "+ex.Message.ToString());
+                sw.Close();
                 return ex.Message.ToString();
             }
         }
@@ -213,42 +216,52 @@ namespace ConsoleApp1
             String tempTime = "";
             String logStr = "";//log
             long freeTime = loadFreeTime();//无键盘鼠标事件动作的判断时长
-            long eclipsedTime = 0;//设置上一次执行时间。
             Boolean isExcuted = false;//初始化执行锁
+            long eclipsedSecond = 0;//计时器已经执行的时间
             Timer t = null;//初始化计时器
             t = new Timer((o) =>
             {
-                var result = CheckComputerFreeState.GetLastInputTime();
-                //显示空闲秒数
-                Console.WriteLine(result);
-                if (result > freeTime)
+                try {
+                    var result = CheckComputerFreeState.GetLastInputTime();
+                    //显示空闲秒数
+                    Console.WriteLine(result.ToString() + " "+ eclipsedSecond.ToString());
+                    //判断是否在freeTime时间内有键鼠按下或移动
+                    if (result < freeTime && eclipsedSecond > freeTime)
+                    {
+                        tempTime = DateTime.Now.ToString("yyyyMMddHHmmss");
+                        logStr = tempTime;
+                        logStr += ",";
+                        logStr += freeTime.ToString();
+                        logStr += ",";
+                        logStr += hostInfoStr;
+                        logStr += ",";
+                        logStr += hostNameStr;
+                        logStr += ",";
+                        logStr += hostIPStr;
+                        Console.WriteLine(logStr);
+                        //写入日志
+                        saveToTxt(logStr);
+                        try
+                        {
+                            //写入监控数据库 
+                            saveToServer(serverURL, tempTime, freeTime.ToString(), hostInfoStr, hostNameStr, hostIPStr);
+                        }
+                        catch (Exception ex1)
+                        {
+                            //显示报错信息
+                            Console.WriteLine(ex1.ToString());
+                        }
+                        eclipsedSecond = 0;
+                    }
+                    eclipsedSecond++;//记录逝去的秒数
+                    
+                }
+                catch (Exception ex)
                 {
-                    eclipsedTime = result;
-                    //设置锁
-                    isExcuted = false;
-                    return;
+                    //显示报错信息
+                    Console.WriteLine(ex.ToString());
                 }
-                if (t == null) return;
-                //执行纪录
-                if ((result == 0)&& !isExcuted) {
-                    tempTime = DateTime.Now.ToString("yyyyMMddHHmmss");
-                    logStr = tempTime;
-                    logStr += ",";
-                    logStr += eclipsedTime.ToString();
-                    logStr += ",";
-                    logStr += hostInfoStr;
-                    logStr += ",";
-                    logStr += hostNameStr;
-                    logStr += ",";
-                    logStr += hostIPStr;
-                    Console.WriteLine(logStr);
-                    //写入日志
-                    saveToTxt(logStr);
-                    //写入监控数据库
-                    saveToServer(serverURL, tempTime, eclipsedTime.ToString(), hostInfoStr, hostNameStr, hostIPStr);
-                    eclipsedTime = 0;//当有新键盘鼠标动作时，重置空闲计时器为0
-                    isExcuted = true;                    
-                }
+                
                 //t.Dispose();
                 
             }, null, 1000, 1000);
